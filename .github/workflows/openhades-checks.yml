@@ -1,0 +1,54 @@
+name: OpenHades checks
+
+on:
+  pull_request:
+    branches: [openhades]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openhades-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-checks:
+    name: OpenHades theme and sidebar
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.15.0"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install pinned dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Typecheck the app
+        working-directory: packages/app
+        run: bun run typecheck:tsc
+
+      - name: Install Chromium
+        working-directory: packages/app
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Test the theme and sidebar
+        working-directory: packages/app
+        run: |
+          cases='vertical tabs resize, scroll, show shortcut hints, and navigate'
+          cases+='|the collapsed sidebar peeks from a resting toggle'
+          cases+='|the Windows menu shares the vertical sidebar'
+          cases+='|the Linux app menu renders in the vertical sidebar header'
+          cases+='|the Linux Hades sidebar preview keeps each control clickable'
+          bun run test:e2e:built e2e/regression/tabs.spec.ts \
+            --project chromium --workers 1 --retries 0 --reporter line --grep "$cases"
