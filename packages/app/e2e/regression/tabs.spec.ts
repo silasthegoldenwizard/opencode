@@ -2045,26 +2045,56 @@ test("the Linux app menu renders in the vertical sidebar header without duplicat
   await mockWorkspace(page, {
     name: "LinuxMenu",
     sessions: [],
-    seed: { settings: { appearance: { tabLayout: "inbox" } } },
+    seed: { theme: { id: "hades", scheme: "dark" }, settings: { appearance: { tabLayout: "inbox" } } },
   })
   await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, os: "linux" })}`)
 
-  const button = page
-    .locator('[data-slot="sidebar-header"]')
-    .getByRole("button", { name: "OpenCode menu", exact: true })
-
-  const home = page.locator('[data-action="vertical-tabs-home"] svg')
-  await expect(home).toBeVisible()
-  await expect(button).toBeVisible()
+  const header = page.locator('[data-slot="sidebar-header"]')
+  const button = header.getByRole("button", { name: "OpenCode menu", exact: true })
+  const expectIconRow = async (home: string) => {
+    const controls = [
+      button,
+      header.getByRole("button", { name: home, exact: true }),
+      header.getByRole("link", { name: "Settings", exact: true }),
+      ...["Search sessions", "New session", "Toggle sidebar"].map((name) =>
+        header.getByRole("button", { name, exact: true }),
+      ),
+    ]
+    const icons = await Promise.all(
+      controls.map(async (control) => {
+        const icon = control.locator("svg")
+        await expect(icon).toBeVisible()
+        const box = await icon.boundingBox()
+        if (!box) throw new Error("sidebar header icon is not rendered")
+        return box
+      }),
+    )
+    const centerY = icons[0].y + icons[0].height / 2
+    expect(icons.map((box) => box.y + box.height / 2)).toEqual(icons.map(() => centerY))
+    for (const [index, box] of icons.slice(1).entries()) {
+      expect(box.x).toBeGreaterThanOrEqual(icons[index].x + icons[index].width)
+    }
+  }
+  await expectIconRow("Home")
   await expect(page.locator('[data-component="desktop-icon-button"]')).toHaveCount(1)
-  await expect
-    .poll(async () => [(await button.locator("svg").boundingBox())?.x, (await home.boundingBox())?.x])
-    .toEqual([19, 19])
 
   await button.click()
   await page.getByRole("menuitem", { name: "File", exact: true }).click()
   await page.getByRole("menuitem", { name: /^Settings/ }).click()
   await expect(page.getByRole("heading", { name: "General" })).toBeVisible()
+
+  await page.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await page.locator('[data-action="settings-sidebar-organize"]').click()
+  await page.getByRole("option", { name: "Consolidated", exact: true }).click()
+  await expectIconRow("Sessions")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  await expect(sidebar.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0)
+  await page.getByRole("tab", { name: "Appearance", exact: true }).click()
+  await page.locator('[data-action="settings-theme"]').click()
+  await page.getByRole("option", { name: "AMOLED", exact: true }).click()
+  await expect(sidebar.getByRole("button", { name: "Settings", exact: true })).toHaveText(/Settings/)
+  await expect(header.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0)
+  await expect(button).toBeVisible()
 })
 
 for (const row of [

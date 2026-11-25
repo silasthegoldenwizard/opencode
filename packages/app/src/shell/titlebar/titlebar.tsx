@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useLocation } from "@solidjs/router"
 import { uuid } from "@opencode/util/uuid"
@@ -38,6 +38,7 @@ import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
+import { useTheme } from "@opencode/ui/theme"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
 import { settingsViewUrl } from "@/settings/route"
@@ -132,6 +133,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const theme = useTheme()
+  const hades = () => theme.themeId() === "hades"
 
   const openSettings = useSettingsDialog()
   const dialog = useDialog()
@@ -201,9 +204,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
 
-  const desktopMenuControls = (inSidebar = false) => (
-    <div class="flex shrink-0 items-center gap-0.5" classList={{ "-ms-0.5": inSidebar }}>
+  const desktopMenuControls = (home: JSX.Element) => (
+    <div class="-ms-0.5 flex shrink-0 items-center gap-0.5">
       <WindowsAppMenu command={command} platform={platform} />
+      {home}
       <Tooltip placement="bottom" value={language.t("sidebar.settings")}>
         <a
           href={settingsViewUrl({ type: "root", tab: "general" })}
@@ -542,8 +546,27 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               )
             }
 
-            const sidebarIconRow = () => !projectNavigation() && !settings.appearance.navigationPrototype()
+            const sidebarIconRow = () =>
+              hades() && !projectNavigation() && (linux() || !settings.appearance.navigationPrototype())
+            const sidebarIconsInHeader = () => linux() && sidebarIconRow()
             const actionInSidebarHeader = () => !sidebarIconRow() && !windows() && !macTrafficLights() && !linux()
+            const firstSidebarAction = () => (
+              <Show when={projectNavigation() || settings.appearance.navigationPrototype()} fallback={homeButton(true)}>
+                {newSessionButton()}
+              </Show>
+            )
+
+            const sidebarIconActions = (homeInHeader = false) => (
+              <div
+                class="flex items-center gap-[3px]"
+                data-slot="sidebar-icon-actions"
+                data-focus-scope={homeInHeader ? undefined : ""}
+              >
+                <Show when={!homeInHeader}>{homeButton(true, true)}</Show>
+                {searchButton(true, true)}
+                {newSessionButton(true)}
+              </div>
+            )
 
             command.register("titlebar-home", () => [
               {
@@ -805,7 +828,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                       }}
                     >
                       <Show when={(windows() || linux()) && !hideVerticalTitlebar()}>
-                        {desktopMenuControls()}
+                        <WindowsAppMenu command={command} platform={platform} />
                       </Show>
                       <Show when={windows() && props.verticalTabs}>
                         <SidebarToggle />
@@ -988,16 +1011,21 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               {(mount) => (
                                 <Portal
                                   mount={mount}
-                                  ref={(element) => (element.className = "flex size-full min-h-0 flex-col")}
+                                  ref={(element) =>
+                                    (element.className = "flex size-full min-h-0 flex-col @container/sidebar-header")
+                                  }
                                 >
                                   <Show when={!windows()}>
                                     <div
                                       data-slot="sidebar-header"
                                       data-has-action={actionInSidebarHeader() || linux() ? "" : undefined}
-                                      class="flex w-full shrink-0 gap-2"
+                                      data-focus-scope={sidebarIconsInHeader() ? "" : undefined}
+                                      class="w-full shrink-0 gap-2"
                                       classList={{
+                                        flex: !sidebarIconsInHeader(),
+                                        "sidebar-header-with-icons": sidebarIconsInHeader(),
                                         "items-start pt-2.5 pb-[3px]": actionInSidebarHeader(),
-                                        "mb-0.5 h-12 items-center": !actionInSidebarHeader(),
+                                        "mb-0.5 h-12 items-center": !actionInSidebarHeader() && !sidebarIconsInHeader(),
                                       }}
                                       style={{
                                         "min-height": macVerticalTabs()
@@ -1018,10 +1046,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       </Show>
                                       <Show when={linux()}>
                                         {/* The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows. */}
-                                        {desktopMenuControls(true)}
+                                        <Show
+                                          when={sidebarIconsInHeader()}
+                                          fallback={
+                                            <div class="-ms-0.5 shrink-0">
+                                              <WindowsAppMenu command={command} platform={platform} />
+                                            </div>
+                                          }
+                                        >
+                                          {desktopMenuControls(homeButton(true, true))}
+                                        </Show>
                                       </Show>
-                                      <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
-                                        <div class="min-w-0 flex-1">{newSessionButton()}</div>
+                                      <Show
+                                        when={sidebarIconsInHeader()}
+                                        fallback={
+                                          <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
+                                            <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
+                                          </Show>
+                                        }
+                                      >
+                                        {sidebarIconActions(true)}
                                       </Show>
                                       <SidebarToggle handoff="out" />
                                     </div>
@@ -1031,22 +1075,25 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       when={sidebarIconRow()}
                                       fallback={
                                         <>
-                                          <Show when={!actionInSidebarHeader()}>{newSessionButton()}</Show>
+                                          <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
                                           <Show
                                             when={settings.appearance.navigationPrototype()}
-                                            fallback={searchButton(true)}
+                                            fallback={
+                                              <>
+                                                {searchButton(true)}
+                                                <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                                  {settingsButton()}
+                                                </Show>
+                                              </>
+                                            }
                                           >
                                             {homeButton(true)}
+                                            {settingsButton()}
                                           </Show>
-                                          {settingsButton()}
                                         </>
                                       }
                                     >
-                                      <div class="flex items-center gap-[3px]" data-focus-scope>
-                                        {homeButton(true, true)}
-                                        {searchButton(true, true)}
-                                        {newSessionButton(true)}
-                                      </div>
+                                      <Show when={!sidebarIconsInHeader()}>{sidebarIconActions()}</Show>
                                     </Show>
                                   </div>
                                   <Show
