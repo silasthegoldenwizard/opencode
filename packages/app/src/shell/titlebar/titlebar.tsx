@@ -86,28 +86,43 @@ function SidebarAction(props: {
   icon: string
   label: string
   keybind: string[]
+  iconOnly?: boolean
   pressed?: boolean
   current?: boolean
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      data-titlebar-tab-action
-      data-action={props.action}
-      data-state={props.pressed || props.current ? "pressed" : undefined}
-      class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
-      aria-label={props.label}
-      aria-pressed={props.pressed}
-      aria-current={props.current ? "page" : undefined}
-      onClick={props.onClick}
+    <Tooltip
+      inactive={!props.iconOnly}
+      placement="bottom"
+      value={
+        <>
+          {props.label}
+          <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
+        </>
+      }
     >
-      <Icon name={props.icon} class="shrink-0" />
-      <span class="min-w-0 truncate">{props.label}</span>
-      <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
-        <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
-      </div>
-    </button>
+      <button
+        type="button"
+        data-titlebar-tab-action
+        data-action={props.action}
+        data-state={props.pressed || props.current ? "pressed" : undefined}
+        class="group flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+        classList={{ "w-8": props.iconOnly, "w-full": !props.iconOnly }}
+        aria-label={props.label}
+        aria-pressed={props.pressed}
+        aria-current={props.current ? "page" : undefined}
+        onClick={props.onClick}
+      >
+        <Icon name={props.icon} class="shrink-0" />
+        <Show when={!props.iconOnly}>
+          <span class="min-w-0 truncate">{props.label}</span>
+          <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+            <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
+          </div>
+        </Show>
+      </button>
+    </Tooltip>
   )
 }
 
@@ -184,7 +199,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
-  const actionInSidebarHeader = () => !windows() && !macTrafficLights() && !linux()
 
   command.register(() => [
     {
@@ -406,7 +420,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const homeIcon = () => (settings.appearance.navigationPrototype() ? "sessions-stack" : "grid-plus")
 
-            const homeButton = (vertical = false) => (
+            const homeButton = (vertical = false, iconOnly = false) => (
               <Show
                 when={vertical}
                 fallback={
@@ -439,13 +453,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   icon={homeIcon()}
                   label={homeLabel()}
                   keybind={command.keybindParts("home.toggle")}
+                  iconOnly={iconOnly}
                   pressed={layout.route().type === "home"}
                   onClick={toggleHome}
                 />
               </Show>
             )
 
-            const searchButton = (vertical = false) => (
+            const searchButton = (vertical = false, iconOnly = false) => (
               <Show
                 when={vertical}
                 fallback={
@@ -476,13 +491,19 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   icon="magnifying-glass"
                   label={language.t("command.session.search")}
                   keybind={command.keybindParts("sessions.search")}
+                  iconOnly={iconOnly}
                   onClick={() => command.trigger("sessions.search")}
                 />
               </Show>
             )
 
-            const newSessionButton = () => (
-              <RecentlyClosedTabsMenu vertical onNewTab={openNewTab} keybind={command.keybindParts("tab.new")} />
+            const newSessionButton = (iconOnly = false) => (
+              <RecentlyClosedTabsMenu
+                vertical
+                iconOnly={iconOnly}
+                onNewTab={openNewTab}
+                keybind={command.keybindParts("tab.new")}
+              />
             )
 
             const settingsButton = () => {
@@ -500,11 +521,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               )
             }
 
-            const firstSidebarAction = () => (
-              <Show when={projectNavigation() || settings.appearance.navigationPrototype()} fallback={homeButton(true)}>
-                {newSessionButton()}
-              </Show>
-            )
+            const sidebarIconRow = () => !projectNavigation() && !settings.appearance.navigationPrototype()
+            const actionInSidebarHeader = () => !sidebarIconRow() && !windows() && !macTrafficLights() && !linux()
 
             command.register("titlebar-home", () => [
               {
@@ -984,26 +1002,32 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                         </div>
                                       </Show>
                                       <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
-                                        <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
+                                        <div class="min-w-0 flex-1">{newSessionButton()}</div>
                                       </Show>
                                       <SidebarToggle handoff="out" />
                                     </div>
                                   </Show>
                                   <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                                    <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
                                     <Show
-                                      when={settings.appearance.navigationPrototype()}
+                                      when={sidebarIconRow()}
                                       fallback={
                                         <>
-                                          {searchButton(true)}
-                                          <Show when={projectNavigation()} fallback={newSessionButton()}>
-                                            {settingsButton()}
+                                          <Show when={!actionInSidebarHeader()}>{newSessionButton()}</Show>
+                                          <Show
+                                            when={settings.appearance.navigationPrototype()}
+                                            fallback={searchButton(true)}
+                                          >
+                                            {homeButton(true)}
                                           </Show>
+                                          {settingsButton()}
                                         </>
                                       }
                                     >
-                                      {homeButton(true)}
-                                      {settingsButton()}
+                                      <div class="flex items-center gap-[3px]" data-focus-scope>
+                                        {homeButton(true, true)}
+                                        {searchButton(true, true)}
+                                        {newSessionButton(true)}
+                                      </div>
                                     </Show>
                                   </div>
                                   <Show

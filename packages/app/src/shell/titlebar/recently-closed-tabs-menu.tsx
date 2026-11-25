@@ -25,6 +25,7 @@ export function RecentlyClosedTabsMenu(props: {
   onNewTab: () => void
   tooltip?: JSX.Element
   vertical?: boolean
+  iconOnly?: boolean
   keybind?: string[]
 }) {
   const language = useLanguage()
@@ -107,21 +108,35 @@ export function RecentlyClosedTabsMenu(props: {
           </Tooltip>
         }
       >
-        <Menu.Context.Trigger
-          as="button"
-          type="button"
-          data-titlebar-tab-action
-          data-action="vertical-tabs-new-session"
-          class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
-          onClick={props.onNewTab}
-          aria-label={language.t("command.session.new")}
+        <Tooltip
+          inactive={!props.iconOnly}
+          placement="bottom"
+          value={
+            <>
+              {language.t("command.session.new")}
+              <Keybind keys={props.keybind ?? []} variant="neutral" dir="ltr" />
+            </>
+          }
         >
-          <Icon name="edit" class="shrink-0" />
-          <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
-          <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
-            <Keybind keys={props.keybind ?? []} variant="neutral" dir="ltr" />
-          </div>
-        </Menu.Context.Trigger>
+          <Menu.Context.Trigger
+            as="button"
+            type="button"
+            data-titlebar-tab-action
+            data-action="vertical-tabs-new-session"
+            class="group flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
+            classList={{ "w-8": props.iconOnly, "w-full": !props.iconOnly }}
+            onClick={props.onNewTab}
+            aria-label={language.t("command.session.new")}
+          >
+            <Icon name="edit" class="shrink-0" />
+            <Show when={!props.iconOnly}>
+              <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
+              <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+                <Keybind keys={props.keybind ?? []} variant="neutral" dir="ltr" />
+              </div>
+            </Show>
+          </Menu.Context.Trigger>
+        </Tooltip>
       </Show>
       <Menu.Context.Portal>
         <Menu.Context.Content

@@ -1027,19 +1027,6 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   expect(gutter.x).toBe(row.x + row.width)
   expect(gutter.x + gutter.width).toBe(chat.x)
 
-  const actions = await Promise.all(
-    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
-      const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
-
-      if (!box) throw new Error(`${action} is not rendered`)
-
-      return box
-    }),
-  )
-
-  const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([3, 3])
-
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
   const resize = async (offset: number, width: string) => {
@@ -1055,20 +1042,26 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
 
   await resize(-44, "196px")
   await resize(-40, "156px")
-
-  for (const name of ["Home", "New session"]) {
-    const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
-    await expect(label).toBeVisible()
-    await expect
-      .poll(() => label.evaluate((element) => element.scrollWidth - element.clientWidth), { message: name })
-      .toBeLessThanOrEqual(1)
-  }
-
   await resize(-200, "136px")
-  const homeLabel = sidebar.getByRole("button", { name: "Home", exact: true }).getByText("Home", { exact: true })
-  await expect
-    .poll(() => homeLabel.evaluate((element) => element.scrollWidth - element.clientWidth))
-    .toBeLessThanOrEqual(1)
+
+  const [homeBox, searchBox, newSessionBox] = await Promise.all(
+    ["Home", "Search sessions", "New session"].map(async (name) => {
+      const button = sidebar.getByRole("button", { name, exact: true })
+      await expect(button.locator("svg")).toBeVisible()
+      await expect(button.getByText(name, { exact: true })).toBeHidden()
+      await expect(button).toBeInViewport({ ratio: 1 })
+      const box = await button.boundingBox()
+      if (!box) throw new Error(`${name} is not rendered`)
+      return box
+    }),
+  )
+  expect([searchBox.y, newSessionBox.y]).toEqual([homeBox.y, homeBox.y])
+  expect(searchBox.x).toBeGreaterThanOrEqual(homeBox.x + homeBox.width)
+  expect(newSessionBox.x).toBeGreaterThanOrEqual(searchBox.x + searchBox.width)
+  const sidebarBox = await sidebar.boundingBox()
+  if (!sidebarBox) throw new Error("vertical sidebar is not rendered")
+  expect(newSessionBox.x + newSessionBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width)
+
   await resize(800, "640px")
   await resize(-380, "260px")
 
@@ -1088,14 +1081,16 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await expect.poll(feather).toEqual(["16px", "0px"])
 
   await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
-  const home = sidebar.locator('[data-action="vertical-tabs-home"]')
+  const home = sidebar.getByRole("button", { name: "Home", exact: true })
 
-  const hint = home.locator('div[aria-hidden="true"]')
+  const hint = page.getByRole("tooltip").filter({ hasText: "Home" })
+  await expect(hint).toBeHidden()
+  await sidebar.getByRole("button", { name: "Search sessions", exact: true }).focus()
+  await page.keyboard.press("Shift+Tab")
+  await expect(home).toBeFocused()
+  await expect(hint).toBeVisible()
   await expect(hint.locator('[data-slot="keybind-v2-label"]')).toHaveText(["Ctrl", "Alt", "H"])
   await expect(hint.locator('[data-component="keybind-v2"]')).toHaveCSS("direction", "ltr")
-  await expect(hint).toBeHidden()
-  await home.focus()
-  await expect(hint).toBeVisible()
 
   await tabB.click()
   await expectPath(page, sessionHref(b.id))
