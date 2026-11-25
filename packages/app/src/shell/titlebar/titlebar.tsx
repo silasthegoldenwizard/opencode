@@ -20,7 +20,7 @@ import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { createPinnedLeading, PinMenuItems, PinnedArea, PinsProvider, usePins } from "@/shell/titlebar/pinned-area"
-import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
+import { collapsedSidebarToggleEnd, macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
 import { RecentSessions } from "@/shell/titlebar/recent-sessions"
@@ -1022,7 +1022,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   <Show when={!windows()}>
                                     <div
                                       data-slot="sidebar-header"
-                                      data-has-action={actionInSidebarHeader() || linux() ? "" : undefined}
+                                      data-has-action={
+                                        actionInSidebarHeader() || (linux() && !sidebarIconsInHeader()) ? "" : undefined
+                                      }
                                       data-focus-scope={sidebarIconsInHeader() ? "" : undefined}
                                       class="w-full shrink-0 gap-2"
                                       classList={{
@@ -1058,18 +1060,21 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                             </div>
                                           }
                                         >
-                                          {desktopMenuControls(homeButton(true, true))}
+                                          <div
+                                            class="sidebar-header-actions"
+                                            style={{
+                                              "--sidebar-peek-toggle-end": `${collapsedSidebarToggleEnd}px`,
+                                            }}
+                                          >
+                                            {desktopMenuControls(homeButton(true, true))}
+                                            {sidebarIconActions(true)}
+                                          </div>
                                         </Show>
                                       </Show>
-                                      <Show
-                                        when={sidebarIconsInHeader()}
-                                        fallback={
-                                          <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
-                                            <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
-                                          </Show>
-                                        }
-                                      >
-                                        {sidebarIconActions(true)}
+                                      <Show when={!sidebarIconsInHeader()}>
+                                        <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
+                                          <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
+                                        </Show>
                                       </Show>
                                       <SidebarToggle handoff="out" />
                                     </div>

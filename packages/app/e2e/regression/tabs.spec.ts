@@ -1054,114 +1054,168 @@ test("an unfocused window preserves a restored manual unread reminder", async ({
   await expect(tab.locator('[data-mark="unread"]')).toBeHidden()
 })
 
-test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 480 })
-  const directory = "C:/OpenCode/Tabs"
-  await mockWorkspace(page, {
-    name: "Tabs",
-    sessions: [a, b],
-    seed: {
-      settings: {
-        appearance: { tabLayout: "vertical" },
-        keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
+for (const hades of [false, true]) {
+  test(`vertical tabs resize, scroll, show shortcut hints, and navigate (${hades ? "Hades" : "stock"})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 480 })
+    const directory = "C:/OpenCode/Tabs"
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [a, b],
+      seed: {
+        theme: hades ? { id: "hades", scheme: "dark" } : undefined,
+        settings: {
+          appearance: { tabLayout: "vertical" },
+          keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
+        },
+        tabs: [
+          a.id,
+          ...Array.from({ length: 24 }, (_, index) => ({ draft: `draft_vertical_${index}`, directory })),
+          b.id,
+        ],
       },
-      tabs: [
-        a.id,
-        ...Array.from({ length: 24 }, (_, index) => ({ draft: `draft_vertical_${index}`, directory })),
-        b.id,
-      ],
-    },
-  })
-  await page.goto(sessionHref(a.id))
-
-  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
-  const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
-  await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
-  await expect(sidebar).toHaveCSS("width", "240px")
-  await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
-
-  // Actions and session rows share one icon lane, and the resize handle fills only the gap after the rows.
-  const [homeIcon, avatar, row, gutter, chat] = await Promise.all([
-    sidebar.locator('[data-action="vertical-tabs-home"] svg').boundingBox(),
-    sidebar.locator('[data-slot="project-avatar-slot"]').first().boundingBox(),
-    sidebar.locator("[data-titlebar-tab]").first().boundingBox(),
-    sidebar.locator('[data-component="resize-handle"]').boundingBox(),
-    page.locator('[data-slot="session-chat-panel"]').boundingBox(),
-  ])
-
-  if (!homeIcon || !avatar || !row || !gutter || !chat) throw new Error("vertical tabs layout is not rendered")
-  expect(avatar.x).toBe(homeIcon.x)
-  expect(gutter.x).toBe(row.x + row.width)
-  expect(gutter.x + gutter.width).toBe(chat.x)
-
-  const handle = sidebar.locator('[data-component="resize-handle"]')
-
-  const resize = async (offset: number, width: string) => {
-    const box = await handle.boundingBox()
-
-    if (!box) throw new Error("vertical tab resize handle has no bounding box")
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(box.x + box.width / 2 + offset, box.y + box.height / 2)
-    await page.mouse.up()
-    await expect(sidebar).toHaveCSS("width", width)
-  }
-
-  await resize(-44, "196px")
-  await resize(-40, "156px")
-  await resize(-200, "136px")
-
-  const [homeBox, searchBox, newSessionBox] = await Promise.all(
-    ["Home", "Search sessions", "New session"].map(async (name) => {
-      const button = sidebar.getByRole("button", { name, exact: true })
-      await expect(button.locator("svg")).toBeVisible()
-      await expect(button.getByText(name, { exact: true })).toBeHidden()
-      await expect(button).toBeInViewport({ ratio: 1 })
-      const box = await button.boundingBox()
-      if (!box) throw new Error(`${name} is not rendered`)
-      return box
-    }),
-  )
-  expect([searchBox.y, newSessionBox.y]).toEqual([homeBox.y, homeBox.y])
-  expect(searchBox.x).toBeGreaterThanOrEqual(homeBox.x + homeBox.width)
-  expect(newSessionBox.x).toBeGreaterThanOrEqual(searchBox.x + searchBox.width)
-  const sidebarBox = await sidebar.boundingBox()
-  if (!sidebarBox) throw new Error("vertical sidebar is not rendered")
-  expect(newSessionBox.x + newSessionBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width)
-
-  await resize(800, "640px")
-  await resize(-380, "260px")
-
-  const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
-
-  // The list feathers only the edges with more rows past them.
-  const feather = () =>
-    scroll.evaluate((element) => {
-      const style = getComputedStyle(element)
-
-      return [style.getPropertyValue("--vertical-tabs-fade-top"), style.getPropertyValue("--vertical-tabs-fade-bottom")]
     })
+    await page.goto(sessionHref(a.id))
 
-  await expect.poll(feather).toEqual(["0px", "16px"])
-  await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
-  await expect(tabB).toBeInViewport({ ratio: 1 })
-  await expect.poll(feather).toEqual(["16px", "0px"])
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
+    await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
+    await expect(sidebar).toHaveCSS("width", "240px")
+    await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
-  await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
-  const home = sidebar.getByRole("button", { name: "Home", exact: true })
+    // Actions and session rows share one icon lane, and the resize handle fills only the gap after the rows.
+    const [homeIcon, avatar, row, gutter, chat] = await Promise.all([
+      sidebar.locator('[data-action="vertical-tabs-home"] svg').boundingBox(),
+      sidebar.locator('[data-slot="project-avatar-slot"]').first().boundingBox(),
+      sidebar.locator("[data-titlebar-tab]").first().boundingBox(),
+      sidebar.locator('[data-component="resize-handle"]').boundingBox(),
+      page.locator('[data-slot="session-chat-panel"]').boundingBox(),
+    ])
 
-  const hint = page.getByRole("tooltip").filter({ hasText: "Home" })
-  await expect(hint).toBeHidden()
-  await sidebar.getByRole("button", { name: "Search sessions", exact: true }).focus()
-  await page.keyboard.press("Shift+Tab")
-  await expect(home).toBeFocused()
-  await expect(hint).toBeVisible()
-  await expect(hint.locator('[data-slot="keybind-v2-label"]')).toHaveText(["Ctrl", "Alt", "H"])
-  await expect(hint.locator('[data-component="keybind-v2"]')).toHaveCSS("direction", "ltr")
+    if (!homeIcon || !avatar || !row || !gutter || !chat) throw new Error("vertical tabs layout is not rendered")
+    expect(avatar.x).toBe(homeIcon.x)
+    expect(gutter.x).toBe(row.x + row.width)
+    expect(gutter.x + gutter.width).toBe(chat.x)
 
-  await tabB.click()
-  await expectPath(page, sessionHref(b.id))
-})
+    const actions = ["Home", "Search sessions", "New session"].map((name) => ({
+      name,
+      button: sidebar.getByRole("button", { name, exact: true }),
+    }))
+
+    if (!hades) {
+      const boxes = await Promise.all(
+        actions.map(async (action) => {
+          const box = await action.button.boundingBox()
+
+          if (!box) throw new Error(`${action.name} is not rendered`)
+
+          return box
+        }),
+      )
+
+      expect(boxes.slice(1).map((box, index) => box.y - (boxes[index].y + boxes[index].height))).toEqual([3, 3])
+    }
+
+    const handle = sidebar.locator('[data-component="resize-handle"]')
+
+    const resize = async (offset: number, width: string) => {
+      const box = await handle.boundingBox()
+
+      if (!box) throw new Error("vertical tab resize handle has no bounding box")
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width / 2 + offset, box.y + box.height / 2)
+      await page.mouse.up()
+      await expect(sidebar).toHaveCSS("width", width)
+    }
+
+    await resize(-44, "196px")
+    await resize(-40, "156px")
+
+    if (!hades) {
+      for (const name of ["Home", "New session"]) {
+        const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
+        await expect(label).toBeVisible()
+        await expect
+          .poll(() => label.evaluate((element) => element.scrollWidth - element.clientWidth), { message: name })
+          .toBeLessThanOrEqual(1)
+      }
+    }
+
+    await resize(-200, "136px")
+
+    if (hades) {
+      const [homeBox, searchBox, newSessionBox] = await Promise.all(
+        actions.map(async (action) => {
+          await expect(action.button.locator("svg")).toBeVisible()
+          await expect(action.button.getByText(action.name, { exact: true })).toBeHidden()
+          await expect(action.button).toBeInViewport({ ratio: 1 })
+          const box = await action.button.boundingBox()
+
+          if (!box) throw new Error(`${action.name} is not rendered`)
+
+          return box
+        }),
+      )
+
+      expect([searchBox.y, newSessionBox.y]).toEqual([homeBox.y, homeBox.y])
+      expect(searchBox.x).toBeGreaterThanOrEqual(homeBox.x + homeBox.width)
+      expect(newSessionBox.x).toBeGreaterThanOrEqual(searchBox.x + searchBox.width)
+      const sidebarBox = await sidebar.boundingBox()
+
+      if (!sidebarBox) throw new Error("vertical sidebar is not rendered")
+      expect(newSessionBox.x + newSessionBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width)
+    } else {
+      const homeLabel = actions[0].button.getByText("Home", { exact: true })
+      await expect
+        .poll(() => homeLabel.evaluate((element) => element.scrollWidth - element.clientWidth))
+        .toBeLessThanOrEqual(1)
+    }
+
+    await resize(800, "640px")
+    await resize(-380, "260px")
+
+    const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+
+    // The list feathers only the edges with more rows past them.
+    const feather = () =>
+      scroll.evaluate((element) => {
+        const style = getComputedStyle(element)
+
+        return [
+          style.getPropertyValue("--vertical-tabs-fade-top"),
+          style.getPropertyValue("--vertical-tabs-fade-bottom"),
+        ]
+      })
+
+    await expect.poll(feather).toEqual(["0px", "16px"])
+    await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+    await expect(tabB).toBeInViewport({ ratio: 1 })
+    await expect.poll(feather).toEqual(["16px", "0px"])
+
+    await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
+    const home = actions[0].button
+
+    const hint = hades ? page.getByRole("tooltip").filter({ hasText: "Home" }) : home.locator('div[aria-hidden="true"]')
+    await expect(hint).toBeHidden()
+
+    if (hades) {
+      await actions[1].button.focus()
+      await page.keyboard.press("Shift+Tab")
+    } else {
+      await home.focus()
+    }
+
+    await expect(home).toBeFocused()
+    await expect(hint).toBeVisible()
+    await expect(hint.locator('[data-slot="keybind-v2-label"]')).toHaveText(["Ctrl", "Alt", "H"])
+    await expect(hint.locator('[data-component="keybind-v2"]')).toHaveCSS("direction", "ltr")
+
+    await tabB.click()
+    await expectPath(page, sessionHref(b.id))
+  })
+}
 
 test.describe("vertical tabs on a touch desktop", () => {
   test.use({ hasTouch: true })
@@ -2118,11 +2172,14 @@ test("the Linux app menu renders in the vertical sidebar header without duplicat
 
   const header = page.locator('[data-slot="sidebar-header"]')
   const button = header.getByRole("button", { name: "OpenCode menu", exact: true })
+  const settingsLink = header.getByRole("link", { name: "Settings", exact: true })
+  const settings = page.getByTestId("settings-screen")
+
   const expectIconRow = async (home: string) => {
     const controls = [
       button,
       header.getByRole("button", { name: home, exact: true }),
-      header.getByRole("link", { name: "Settings", exact: true }),
+      settingsLink,
       ...["Search sessions", "New session", "Toggle sidebar"].map((name) =>
         header.getByRole("button", { name, exact: true }),
       ),
@@ -2145,6 +2202,12 @@ test("the Linux app menu renders in the vertical sidebar header without duplicat
   await expectIconRow("Home")
   await expect(page.locator('[data-component="desktop-icon-button"]')).toHaveCount(1)
 
+  await settingsLink.click()
+  await expect(settings.getByRole("heading", { name: "General", exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(settings).toBeHidden()
+  await expect(settingsLink).toBeFocused()
+
   await button.click()
   await page.getByRole("menuitem", { name: "File", exact: true }).click()
   await page.getByRole("menuitem", { name: /^Settings/ }).click()
@@ -2160,9 +2223,75 @@ test("the Linux app menu renders in the vertical sidebar header without duplicat
   await page.locator('[data-action="settings-theme"]').click()
   await page.getByRole("option", { name: "AMOLED", exact: true }).click()
   await expect(sidebar.getByRole("button", { name: "Settings", exact: true })).toHaveText(/Settings/)
-  await expect(header.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0)
+  await expect(settingsLink).toHaveCount(0)
   await expect(button).toBeVisible()
 })
+
+for (const direction of ["ltr", "rtl"]) {
+  test(`the Linux Hades sidebar preview keeps each control clickable (${direction})`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "LinuxMenu",
+      sessions: [],
+      seed: { theme: { id: "hades", scheme: "dark" }, settings: { appearance: { tabLayout: "inbox" } } },
+    })
+    await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, os: "linux" })}`)
+
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    const header = sidebar.locator('[data-slot="sidebar-header"]')
+    const dockedToggle = header.getByRole("button", { name: "Toggle sidebar", exact: true })
+    await expect(dockedToggle).toBeVisible()
+    await page.locator("html").evaluate((element, dir) => element.setAttribute("dir", dir), direction)
+
+    // The second direction uses the sidebar's minimum width, where the actions must wrap.
+    if (direction === "rtl") {
+      const handle = await sidebar.locator('[data-component="resize-handle"]').boundingBox()
+
+      if (!handle) throw new Error("sidebar resize handle is not rendered")
+
+      const x = handle.x + handle.width / 2
+      const y = handle.y + handle.height / 2
+      await page.mouse.move(x, y)
+      await page.mouse.down()
+      await page.mouse.move(x + 150, y)
+      await page.mouse.up()
+      await expect(sidebar).toHaveCSS("width", "136px")
+    }
+
+    await dockedToggle.click()
+    await expect(sidebar).toHaveCSS("width", "0px")
+
+    const floatingToggle = page
+      .locator('[data-slot="collapsed-sidebar-toggle"]')
+      .getByRole("button", { name: "Toggle sidebar", exact: true })
+
+    await floatingToggle.hover()
+    await expect(sidebar).toHaveAttribute("data-peek", "")
+
+    const controls = [
+      header.getByRole("button", { name: "OpenCode menu", exact: true }),
+      header.getByRole("button", { name: "Home", exact: true }),
+      header.getByRole("link", { name: "Settings", exact: true }),
+      header.getByRole("button", { name: "Search sessions", exact: true }),
+      header.getByRole("button", { name: "New session", exact: true }),
+    ]
+
+    for (const control of [...controls, floatingToggle]) {
+      // A center click can pass even when a neighboring control covers part of the hit area.
+      await expect
+        .poll(() =>
+          control.evaluate((element) => {
+            const box = element.getBoundingClientRect()
+            const y = box.top + box.height / 2
+
+            return [box.left + 1, box.left + box.width / 2, box.right - 1].every((x) =>
+              element.contains(document.elementFromPoint(x, y)),
+            )
+          }),
+        )
+        .toBe(true)
+    }
+  })
+}
 
 for (const row of [
   { name: "left tabs", width: 1280, settings: { appearance: { tabLayout: "vertical" } }, position: { x: 20, y: 25 } },

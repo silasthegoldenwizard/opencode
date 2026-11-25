@@ -14,8 +14,32 @@
   grid-area: 1 / 3;
 }
 
-.sidebar-header-with-icons > [data-slot="sidebar-icon-actions"] {
+.sidebar-header-actions {
+  display: contents;
+}
+
+.sidebar-header-actions > [data-slot="sidebar-icon-actions"] {
   grid-area: 2 / 1 / auto / -1;
+}
+
+/* Reserve the floating toggle's lane in the preview. Either group can wrap without covering another control. */
+[data-slot="vertical-tabs-sidebar"][data-peek] .sidebar-header-actions {
+  display: flex;
+  grid-area: 1 / 1 / auto / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: inherit;
+}
+
+[data-slot="vertical-tabs-sidebar"][data-peek] .sidebar-header-actions::before {
+  content: "";
+  flex-shrink: 0;
+  inline-size: calc(var(--sidebar-peek-toggle-end) - var(--sidebar-inset-start));
+  block-size: 28px;
+}
+
+[data-slot="vertical-tabs-sidebar"][data-peek] .sidebar-header-with-icons > :last-child {
+  align-self: start;
 }
 
 /* Leave room for the menu, Settings, all three actions, and the sidebar toggle. */
@@ -24,7 +48,7 @@
     column-gap: 8px;
   }
 
-  .sidebar-header-with-icons > [data-slot="sidebar-icon-actions"] {
+  .sidebar-header-actions > [data-slot="sidebar-icon-actions"] {
     grid-area: 1 / 2;
   }
 }
