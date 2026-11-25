@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useLocation } from "@solidjs/router"
 import { uuid } from "@opencode/util/uuid"
@@ -20,7 +20,7 @@ import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { createPinnedLeading, PinMenuItems, PinnedArea, PinsProvider, usePins } from "@/shell/titlebar/pinned-area"
-import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
+import { collapsedSidebarToggleEnd, macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
 import { RecentSessions } from "@/shell/titlebar/recent-sessions"
@@ -38,10 +38,13 @@ import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
+import { useTheme } from "@opencode/ui/theme"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
+import { settingsViewUrl } from "@/settings/route"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
+import { createAutoTabSections } from "./auto-tab-sections"
 import {
   INITIAL_MOBILE_TABS_STATE,
   selectMobileTabsOpen,
@@ -86,28 +89,43 @@ function SidebarAction(props: {
   icon: string
   label: string
   keybind: string[]
+  iconOnly?: boolean
   pressed?: boolean
   current?: boolean
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      data-titlebar-tab-action
-      data-action={props.action}
-      data-state={props.pressed || props.current ? "pressed" : undefined}
-      class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
-      aria-label={props.label}
-      aria-pressed={props.pressed}
-      aria-current={props.current ? "page" : undefined}
-      onClick={props.onClick}
+    <Tooltip
+      inactive={!props.iconOnly}
+      placement="bottom"
+      value={
+        <>
+          {props.label}
+          <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
+        </>
+      }
     >
-      <Icon name={props.icon} class="shrink-0" />
-      <span class="min-w-0 truncate">{props.label}</span>
-      <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
-        <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
-      </div>
-    </button>
+      <button
+        type="button"
+        data-titlebar-tab-action
+        data-action={props.action}
+        data-state={props.pressed || props.current ? "pressed" : undefined}
+        class="group flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+        classList={{ "w-8": props.iconOnly, "w-full": !props.iconOnly }}
+        aria-label={props.label}
+        aria-pressed={props.pressed}
+        aria-current={props.current ? "page" : undefined}
+        onClick={props.onClick}
+      >
+        <Icon name={props.icon} class="shrink-0" />
+        <Show when={!props.iconOnly}>
+          <span class="min-w-0 truncate">{props.label}</span>
+          <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+            <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
+          </div>
+        </Show>
+      </button>
+    </Tooltip>
   )
 }
 
@@ -116,6 +134,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const theme = useTheme()
+  const hades = () => theme.themeId() === "hades"
 
   const openSettings = useSettingsDialog()
   const dialog = useDialog()
@@ -184,7 +204,27 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
-  const actionInSidebarHeader = () => !windows() && !macTrafficLights() && !linux()
+
+  const desktopMenuControls = (home: JSX.Element) => (
+    <div class="-ms-0.5 flex shrink-0 items-center gap-0.5">
+      <WindowsAppMenu command={command} platform={platform} />
+      {home}
+      <Tooltip placement="bottom" value={language.t("sidebar.settings")}>
+        <a
+          href={settingsViewUrl({ type: "root", tab: "general" })}
+          class="flex size-7 items-center justify-center rounded-[6px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+          aria-label={language.t("sidebar.settings")}
+          onClick={(event) => {
+            // Keep the route and focus that Settings returns to.
+            event.preventDefault()
+            openSettings()
+          }}
+        >
+          <Icon name="settings-gear" />
+        </a>
+      </Tooltip>
+    </div>
+  )
 
   command.register(() => [
     {
@@ -406,7 +446,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const homeIcon = () => (settings.appearance.navigationPrototype() ? "sessions-stack" : "grid-plus")
 
-            const homeButton = (vertical = false) => (
+            const homeButton = (vertical = false, iconOnly = false) => (
               <Show
                 when={vertical}
                 fallback={
@@ -439,13 +479,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   icon={homeIcon()}
                   label={homeLabel()}
                   keybind={command.keybindParts("home.toggle")}
+                  iconOnly={iconOnly}
                   pressed={layout.route().type === "home"}
                   onClick={toggleHome}
                 />
               </Show>
             )
 
-            const searchButton = (vertical = false) => (
+            const searchButton = (vertical = false, iconOnly = false) => (
               <Show
                 when={vertical}
                 fallback={
@@ -476,13 +517,19 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   icon="magnifying-glass"
                   label={language.t("command.session.search")}
                   keybind={command.keybindParts("sessions.search")}
+                  iconOnly={iconOnly}
                   onClick={() => command.trigger("sessions.search")}
                 />
               </Show>
             )
 
-            const newSessionButton = () => (
-              <RecentlyClosedTabsMenu vertical onNewTab={openNewTab} keybind={command.keybindParts("tab.new")} />
+            const newSessionButton = (iconOnly = false) => (
+              <RecentlyClosedTabsMenu
+                vertical
+                iconOnly={iconOnly}
+                onNewTab={openNewTab}
+                keybind={command.keybindParts("tab.new")}
+              />
             )
 
             const settingsButton = () => {
@@ -500,10 +547,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               )
             }
 
+            const sidebarIconRow = () =>
+              hades() && !projectNavigation() && (linux() || !settings.appearance.navigationPrototype())
+            const sidebarIconsInHeader = () => linux() && sidebarIconRow()
+            const actionInSidebarHeader = () => !sidebarIconRow() && !windows() && !macTrafficLights() && !linux()
             const firstSidebarAction = () => (
               <Show when={projectNavigation() || settings.appearance.navigationPrototype()} fallback={homeButton(true)}>
                 {newSessionButton()}
               </Show>
+            )
+
+            const sidebarIconActions = (homeInHeader = false) => (
+              <div
+                class="flex items-center gap-[3px]"
+                data-slot="sidebar-icon-actions"
+                data-focus-scope={homeInHeader ? undefined : ""}
+              >
+                <Show when={!homeInHeader}>{homeButton(true, true)}</Show>
+                {searchButton(true, true)}
+                {newSessionButton(true)}
+              </div>
             )
 
             command.register("titlebar-home", () => [
@@ -676,6 +739,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   const prototype = () => settings.appearance.navigationPrototype()
                   const pinnedTop = createPinnedLeading("horizontal")
                   const pinnedSide = createPinnedLeading("vertical")
+                  const grouped = createAutoTabSections({ hidden: pins.holds, currentTab })
 
                   const pinMenu = (tab: Tab) => {
                     const ref = pins.refOf(tab)
@@ -707,6 +771,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     <TitlebarTabStrip
                       orientation="vertical"
                       leading={pinnedSide()}
+                      sections={grouped.vertical()}
                       hidden={pins.holds}
                       tabContextMenu={pinMenu}
                       tabs={tabsStore}
@@ -916,6 +981,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               </Show>
                               <TitlebarTabStrip
                                 leading={prototype() ? pinnedTop() : undefined}
+                                sections={prototype() ? grouped.horizontal() : undefined}
                                 hidden={prototype() ? pins.holds : undefined}
                                 tabContextMenu={prototype() ? pinMenu : undefined}
                                 tabs={tabsStore}
@@ -949,16 +1015,23 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               {(mount) => (
                                 <Portal
                                   mount={mount}
-                                  ref={(element) => (element.className = "flex size-full min-h-0 flex-col")}
+                                  ref={(element) =>
+                                    (element.className = "flex size-full min-h-0 flex-col @container/sidebar-header")
+                                  }
                                 >
                                   <Show when={!windows()}>
                                     <div
                                       data-slot="sidebar-header"
-                                      data-has-action={actionInSidebarHeader() || linux() ? "" : undefined}
-                                      class="flex w-full shrink-0 gap-2"
+                                      data-has-action={
+                                        actionInSidebarHeader() || (linux() && !sidebarIconsInHeader()) ? "" : undefined
+                                      }
+                                      data-focus-scope={sidebarIconsInHeader() ? "" : undefined}
+                                      class="w-full shrink-0 gap-2"
                                       classList={{
+                                        flex: !sidebarIconsInHeader(),
+                                        "sidebar-header-with-icons": sidebarIconsInHeader(),
                                         "items-start pt-2.5 pb-[3px]": actionInSidebarHeader(),
-                                        "mb-0.5 h-12 items-center": !actionInSidebarHeader(),
+                                        "mb-0.5 h-12 items-center": !actionInSidebarHeader() && !sidebarIconsInHeader(),
                                       }}
                                       style={{
                                         "min-height": macVerticalTabs()
@@ -979,31 +1052,57 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       </Show>
                                       <Show when={linux()}>
                                         {/* The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows. */}
-                                        <div class="-ms-0.5 shrink-0">
-                                          <WindowsAppMenu command={command} platform={platform} />
-                                        </div>
+                                        <Show
+                                          when={sidebarIconsInHeader()}
+                                          fallback={
+                                            <div class="-ms-0.5 shrink-0">
+                                              <WindowsAppMenu command={command} platform={platform} />
+                                            </div>
+                                          }
+                                        >
+                                          <div
+                                            class="sidebar-header-actions"
+                                            style={{
+                                              "--sidebar-peek-toggle-end": `${collapsedSidebarToggleEnd}px`,
+                                            }}
+                                          >
+                                            {desktopMenuControls(homeButton(true, true))}
+                                            {sidebarIconActions(true)}
+                                          </div>
+                                        </Show>
                                       </Show>
-                                      <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
-                                        <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
+                                      <Show when={!sidebarIconsInHeader()}>
+                                        <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
+                                          <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
+                                        </Show>
                                       </Show>
                                       <SidebarToggle handoff="out" />
                                     </div>
                                   </Show>
                                   <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                                    <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
                                     <Show
-                                      when={settings.appearance.navigationPrototype()}
+                                      when={sidebarIconRow()}
                                       fallback={
                                         <>
-                                          {searchButton(true)}
-                                          <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                          <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
+                                          <Show
+                                            when={settings.appearance.navigationPrototype()}
+                                            fallback={
+                                              <>
+                                                {searchButton(true)}
+                                                <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                                  {settingsButton()}
+                                                </Show>
+                                              </>
+                                            }
+                                          >
+                                            {homeButton(true)}
                                             {settingsButton()}
                                           </Show>
                                         </>
                                       }
                                     >
-                                      {homeButton(true)}
-                                      {settingsButton()}
+                                      <Show when={!sidebarIconsInHeader()}>{sidebarIconActions()}</Show>
                                     </Show>
                                   </div>
                                   <Show

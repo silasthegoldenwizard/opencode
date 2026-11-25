@@ -80,6 +80,7 @@ const names = new Map(
     flexoki: "Flexoki",
     github: "GitHub",
     gruvbox: "Gruvbox",
+    hades: "hades",
     kanagawa: "Kanagawa",
     "lucent-orng": "Lucent Orng",
     material: "Material",
