@@ -40,6 +40,7 @@ import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
+import { settingsViewUrl } from "@/settings/route"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
 import {
@@ -199,6 +200,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
+
+  const desktopMenuControls = (inSidebar = false) => (
+    <div class="flex shrink-0 items-center gap-0.5" classList={{ "-ms-0.5": inSidebar }}>
+      <WindowsAppMenu command={command} platform={platform} />
+      <Tooltip placement="bottom" value={language.t("sidebar.settings")}>
+        <a
+          href={settingsViewUrl({ type: "root", tab: "general" })}
+          class="flex size-7 items-center justify-center rounded-[6px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+          aria-label={language.t("sidebar.settings")}
+          onClick={(event) => {
+            // Keep the route and focus that Settings returns to.
+            event.preventDefault()
+            openSettings()
+          }}
+        >
+          <Icon name="settings-gear" />
+        </a>
+      </Tooltip>
+    </div>
+  )
 
   command.register(() => [
     {
@@ -784,7 +805,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                       }}
                     >
                       <Show when={(windows() || linux()) && !hideVerticalTitlebar()}>
-                        <WindowsAppMenu command={command} platform={platform} />
+                        {desktopMenuControls()}
                       </Show>
                       <Show when={windows() && props.verticalTabs}>
                         <SidebarToggle />
@@ -997,9 +1018,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       </Show>
                                       <Show when={linux()}>
                                         {/* The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows. */}
-                                        <div class="-ms-0.5 shrink-0">
-                                          <WindowsAppMenu command={command} platform={platform} />
-                                        </div>
+                                        {desktopMenuControls(true)}
                                       </Show>
                                       <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
                                         <div class="min-w-0 flex-1">{newSessionButton()}</div>
