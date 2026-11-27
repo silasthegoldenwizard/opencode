@@ -34,6 +34,9 @@ export type FatalRendererErrorLog = {
 }
 
 type PlatformBase = {
+  /** Product name used in the document and window title. */
+  windowTitle?: string
+
   requestMicrophone?(): Promise<boolean>
   setVoiceCallActive?(active: boolean): Promise<void>
   /** App version */
@@ -189,3 +192,7 @@ export const { use: usePlatform, provider: PlatformProvider } = createSimpleCont
     return props.value
   },
 })
+
+export function useWindowTitle() {
+  return usePlatform().windowTitle ?? "OpenCode"
+}

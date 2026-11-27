@@ -13,6 +13,7 @@ import { LocationProvider } from "@/workspaces/location"
 import { ModelsProvider } from "@/providers/models/models"
 import { useProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useWindowTitle } from "@/runtime/platform/platform"
 import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
@@ -290,10 +291,12 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 
 // Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
 function SessionDocumentTitle(props: { title: () => string | undefined }) {
+  const windowTitle = useWindowTitle()
+
   // Keyed: <Title> reads its text inside a meta effect, which would hit a stale Show accessor once the session is deleted.
   return (
     <Show when={props.title()} keyed>
-      {(value) => <Title>{`${value} · OpenCode`}</Title>}
+      {(value) => <Title>{`${value} · ${windowTitle}`}</Title>}
     </Show>
   )
 }

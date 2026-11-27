@@ -32,6 +32,7 @@ import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { PluginRoot } from "@/runtime/plugin/root"
 import { baseRouter } from "@/runtime/platform/base-path-router"
+import { useWindowTitle } from "@/runtime/platform/platform"
 
 export { preloadRoute }
 
@@ -70,11 +71,12 @@ export function AppBaseProviders(
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
   }>,
 ) {
+  const windowTitle = useWindowTitle()
   onMount(() => onCleanup(installFocusRescue()))
 
   return (
     <MetaProvider>
-      <Title>OpenCode</Title>
+      <Title>{windowTitle}</Title>
       <Font />
       <ThemeProvider onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}>
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>

@@ -3,6 +3,7 @@ import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, setZoomLevel, webviewZoom, zoomLevel } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
+import { desktopWindowTitle } from "../../shared/window-title"
 import { createPluginBridge } from "../plugins"
 import { onDeepLinks } from "../startup/deep-links"
 import { createDesktopFiles } from "./files"
@@ -21,6 +22,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
   return {
     platform: "desktop",
     os,
+    windowTitle: desktopWindowTitle,
     version: windowState.version,
     windowID: windowState.id,
     ...createDesktopFiles(api, os),
