@@ -45,6 +45,7 @@ import {
   type StartupEvent,
 } from "./startup/machine"
 import { LoadingSplash } from "./startup/splash"
+import { LinuxTitlebar } from "./window/linux-titlebar"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 
@@ -140,6 +141,9 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
   return (
     <PlatformProvider value={platform}>
+      <Show when={platform.os === "linux" && !platform.windowFullscreen?.()}>
+        <LinuxTitlebar zoom={platform.webviewZoom?.() ?? 1} />
+      </Show>
       <AppBaseProviders
         locale={selectStartupLocale(startup.state())}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}

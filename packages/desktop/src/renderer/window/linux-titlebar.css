@@ -1,0 +1,39 @@
+:root {
+  /* A development renderer can reload before its window has the native overlay. */
+  --linux-window-titlebar-height: env(titlebar-area-height, 0px);
+}
+
+.linux-window-titlebar {
+  /* Keep the window frame above renderer dialogs, like a native titlebar. */
+  position: relative;
+  z-index: 1001;
+  app-region: drag;
+  flex: none;
+  display: grid;
+  align-items: center;
+  block-size: var(--linux-window-titlebar-height);
+  overflow: hidden;
+  /* Leave equal space on both sides of the centered title, even when the controls are on the left. */
+  padding-inline: min(
+    50%,
+    max(env(titlebar-area-x, 0px), calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%)))
+  );
+  background-color: #000;
+  color: #fff;
+  /* Like the native frame, the title and caption controls keep their size when the app zooms. */
+  font-size: calc(13px / var(--linux-window-titlebar-zoom));
+  font-weight: var(--font-weight-medium);
+  line-height: calc(var(--line-height-compact) / var(--linux-window-titlebar-zoom));
+  text-align: center;
+  user-select: none;
+}
+
+.linux-window-titlebar > bdi {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linux-window-titlebar ~ [data-component="startup-overlay"] {
+  inset-block-start: var(--linux-window-titlebar-height);
+}

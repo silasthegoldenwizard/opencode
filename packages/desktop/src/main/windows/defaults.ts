@@ -63,7 +63,7 @@ function captionSymbolColor(mode: "light" | "dark") {
   return mode === "dark" ? "white" : "black"
 }
 
-// macOS and Windows hide the titlebar; Windows draws its window controls in an overlay sized to the zoom.
+// The renderer draws the titlebar; Windows and Linux keep their caption buttons in a native overlay.
 export function platformFrame(mode: "light" | "dark", zoom: number) {
   const frame: BrowserWindowConstructorOptions = {}
 
@@ -76,6 +76,12 @@ export function platformFrame(mode: "light" | "dark", zoom: number) {
     frame.frame = false
     frame.titleBarStyle = "hidden"
     frame.titleBarOverlay = titlebarOverlay(mode, zoom)
+  }
+
+  if (process.platform === "linux") {
+    frame.frame = false
+    frame.titleBarStyle = "hidden"
+    frame.titleBarOverlay = { color: "#000000", symbolColor: "#ffffff", height: 36 }
   }
 
   return frame

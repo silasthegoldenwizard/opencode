@@ -51,7 +51,7 @@ export function LoadingSplash(props: {
       fallback={
         <div
           data-component="startup-splash"
-          class="h-dvh w-screen flex flex-col items-center justify-center"
+          class="size-full flex flex-col items-center justify-center"
           classList={{
             "bg-v2-background-bg-deep": props.deep,
             "bg-v2-background-bg-base": !props.deep,
@@ -65,7 +65,7 @@ export function LoadingSplash(props: {
         data-component="first-launch-splash"
         data-drawing={props.drawingPaused ? "pending" : "running"}
         aria-hidden="true"
-        class="h-dvh w-screen bg-v2-background-bg-base"
+        class="size-full bg-v2-background-bg-base"
         style={{
           // Match the default session's titlebar, panel insets, and wordmark position.
           "padding-block-start": `calc(${titlebarHeight()} + ${props.platform.os === "windows" ? 1 : 8}px)`,
