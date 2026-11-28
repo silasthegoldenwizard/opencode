@@ -3,6 +3,11 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
 import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
+import {
+  PTY_CONNECT_TICKET_QUERY,
+  PTY_CONNECT_TOKEN_HEADER,
+  PTY_CONNECT_TOKEN_HEADER_VALUE,
+} from "@opencode/protocol/groups/pty"
 import { ServerInfo } from "@opencode/protocol/groups/server"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
@@ -42,18 +47,26 @@ try {
   if (info.id === undefined || info.password === undefined) throw new Error("Registration is missing service identity")
   const credential = btoa(`opencode:${info.password}`)
   const headers = { authorization: "Basic " + credential }
-  const token = encodeURIComponent(credential)
   const serverInfo = await waitForReady(info.url, headers)
   if (serverInfo.pid !== info.pid) throw new Error("Server info does not match registration")
-  await verifyClientMcpSocket(info.url, token)
-  const tokenInfo = await fetch(new URL(`/api/info?auth_token=${token}`, info.url), {
+  await verifyClientMcpSocket(info.url, headers)
+  const queryInfoUrl = new URL("/api/info", info.url)
+  queryInfoUrl.searchParams.set("auth_token", credential)
+  const queryInfo = await fetch(queryInfoUrl, {
     signal: AbortSignal.timeout(5_000),
   })
-  if (tokenInfo.status !== 200) throw new Error("Compiled service rejected query authentication")
-  const tokenOpenApi = await fetch(new URL(`/openapi.json?auth_token=${token}`, info.url), {
+  if (queryInfo.status !== 401) throw new Error("Compiled service accepted query authentication")
+  const queryOpenApiUrl = new URL("/openapi.json", info.url)
+  queryOpenApiUrl.searchParams.set("auth_token", credential)
+  const queryOpenApi = await fetch(queryOpenApiUrl, {
     signal: AbortSignal.timeout(5_000),
   })
-  if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
+  if (queryOpenApi.status !== 401) throw new Error("Compiled application accepted query authentication")
+  const authenticatedOpenApi = await fetch(new URL("/openapi.json", info.url), {
+    headers,
+    signal: AbortSignal.timeout(5_000),
+  })
+  if (authenticatedOpenApi.status !== 200) throw new Error("Compiled application rejected Basic authentication")
   await verifyWebUi(info.url)
   if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
   const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
@@ -139,8 +152,23 @@ async function verifyWebUi(url: string) {
 }
 
 // Bun once bundled the WebSocket server away, so every upgrade failed only in the compiled binary.
-async function verifyClientMcpSocket(url: string, token: string) {
-  const endpoint = new URL(`${MCP_CLIENT_PATH}?name=smoke&auth_token=${token}`, url)
+async function verifyClientMcpSocket(url: string, headers: Record<string, string>) {
+  const ticketUrl = new URL(`${MCP_CLIENT_PATH}/token`, url)
+  ticketUrl.searchParams.set("name", "smoke")
+  const ticketHeaders = new Headers(headers)
+  ticketHeaders.set(PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE)
+  const ticketResponse = await fetch(ticketUrl, {
+    method: "POST",
+    headers: ticketHeaders,
+    signal: AbortSignal.timeout(5_000),
+  })
+  if (ticketResponse.status !== 200) throw new Error("Compiled service rejected a client MCP ticket request")
+  const ticket = ((await ticketResponse.json()) as { data?: { ticket?: string } }).data?.ticket
+  if (!ticket) throw new Error("Compiled service returned no client MCP ticket")
+
+  const endpoint = new URL(MCP_CLIENT_PATH, url)
+  endpoint.searchParams.set("name", "smoke")
+  endpoint.searchParams.set(PTY_CONNECT_TICKET_QUERY, ticket)
   endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:"
   const socket = new WebSocket(endpoint)
   const message = await new Promise<string>((resolve, reject) => {

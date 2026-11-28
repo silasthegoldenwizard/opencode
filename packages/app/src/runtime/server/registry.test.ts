@@ -37,16 +37,16 @@ test("the current server is named by its hostname, a custom name wins, and other
   expect(serverLabel({ ...remote, displayName: "apollo" })).toBe("apollo")
 })
 
-test("startup auth_token credentials override a persisted same-url server; without one the persisted password stays", () => {
+test("provided credentials combine with a persisted same-url server; a persisted password stays", () => {
   const url = "https://server.example.test"
   const decode = Schema.decodeUnknownSync(serverSchema())
 
   const override = resolveServerList({
     stored: decode({ list: [{ url }] }).list,
-    props: [{ type: "http", authToken: true, http: { url, password: "secret" } }],
+    props: [{ type: "http", http: { url, password: "secret" } }],
   })
 
-  expect(override).toEqual([{ type: "http", authToken: true, http: { url, password: "secret" } }])
+  expect(override).toEqual([{ type: "http", http: { url, password: "secret" } }])
   expect(String(ServerConnection.key(override[0]!))).toBe(url)
 
   const kept = resolveServerList({
@@ -56,7 +56,6 @@ test("startup auth_token credentials override a persisted same-url server; witho
 
   expect(kept).toHaveLength(1)
   expect(kept[0] && ServerConnection.http(kept[0])).toEqual({ url, password: "saved" })
-  expect(kept[0]?.type === "http" ? kept[0].authToken : true).toBeUndefined()
 })
 
 test("treats WSL and mismatched-port loopback servers as remote connections", () => {

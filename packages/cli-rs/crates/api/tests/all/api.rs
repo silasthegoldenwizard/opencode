@@ -201,14 +201,17 @@ async fn with_header_replaces_a_client_header() {
 }
 
 #[tokio::test]
-async fn query_auth_puts_the_token_in_the_url() {
+async fn authentication_keeps_the_token_out_of_the_url() {
     let script = Script::new(204, "text/plain", "");
-    let client = client(&script).auth(Auth::Query { username: "opencode".to_owned(), password: "secret".to_owned() });
+    let client = client(&script).auth(Auth::password("secret"));
     let input = SessionRemoveInput { session_id: "ses_1".into() };
     client.session_remove(&input).await.unwrap();
     let request = script.requests.lock().unwrap().pop().unwrap();
-    assert_eq!(request.url.query(), Some("auth_token=b3BlbmNvZGU6c2VjcmV0"));
-    assert!(!request.headers.iter().any(|(key, _)| key == "authorization"));
+    assert_eq!(request.url.query(), None);
+    assert!(request
+        .headers
+        .iter()
+        .any(|(key, value)| key == "authorization" && value == "Basic b3BlbmNvZGU6c2VjcmV0"));
 }
 
 #[tokio::test]

@@ -1,4 +1,3 @@
-use opencode_api::client::Auth;
 use opencode_api::transport::{Request, Reqwest, Transport};
 use opencode_util::{bail, error};
 use serde_json::Value;
@@ -24,8 +23,8 @@ pub fn run(context: &Context, args: &ApiArgs) -> error::Result<()> {
         let endpoint = server.endpoint();
         let transport = Reqwest::default();
         let auth = match &endpoint.auth {
-            Some(auth @ Auth::Basic { .. }) => vec![("authorization".to_owned(), format!("Basic {}", auth.token()))],
-            _ => Vec::new(),
+            Some(auth) => vec![("authorization".to_owned(), format!("Basic {}", auth.token()))],
+            None => Vec::new(),
         };
         let params = params(&args.param);
         let (method, path) = match raw_request(&args.request) {

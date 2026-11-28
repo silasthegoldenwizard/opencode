@@ -10,7 +10,7 @@ function serverSchema() {
 }
 
 describe("server persistence schema", () => {
-  test("migrates legacy auth, keeps the old project directories for migration and writes only current server objects", () => {
+  test("migrates legacy auth, drops the startup URL marker and writes only current server objects", () => {
     const schema = serverSchema()
 
     const input = {
@@ -40,7 +40,6 @@ describe("server persistence schema", () => {
           type: "http",
           displayName: "Remote",
           label: "Production",
-          authToken: true,
           http: { url: "https://nested.example", password: "second" },
         },
       ],
