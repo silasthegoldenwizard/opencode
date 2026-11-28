@@ -609,6 +609,10 @@
     display: block;
   }
 
+  .markdown-remote-media {
+    cursor: pointer;
+  }
+
   /* Media keeps inside its message, whatever size the author gave it. */
   video,
   audio {

@@ -74,7 +74,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
 story("authored HTML cannot supply application behavior attributes", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
-    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
+    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-markdown-media-src", "data-markdown-media-srcset", "data-markdown-media-poster", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
     const box = document.createElement("div")
     box.innerHTML = sanitizeMarkdown(`<a href="#sample" id="sample" name="legacy" ${names.map(n => `${n}="fixture"`).join(" ")}>sample</a><label for="sample">label</label>`)
     const a = box.querySelector("a")!
@@ -192,7 +192,10 @@ story("keeps video and audio inside their message", async ({ page }) => {
   const video = md.locator("video[controls]")
   await expect(video).toHaveAttribute("width", "2048")
   await expect(video).not.toHaveAttribute("onplay")
-  await expect(md.locator('video > source[type="video/mp4"]')).toHaveAttribute("src", "https://example.invalid/clip.mp4")
+  await expect(md.locator('video > source[type="video/mp4"]')).toHaveAttribute(
+    "data-markdown-media-src",
+    "https://example.invalid/clip.mp4",
+  )
   await expect(md.locator('video > track[kind="captions"]')).toHaveAttribute("srclang", "en")
   await expect(md.locator("audio[controls][loop]")).not.toHaveAttribute("style")
   await expect(md).toHaveCSS("contain", "paint")
@@ -1410,25 +1413,53 @@ for (const streaming of [false, true]) {
   )
 }
 
-story("keeps remote images browser-owned and rejects unsafe image sources", async ({ page }) => {
-  await page.route("https://images.example/chart.png", (route) => {
+story("loads remote media only after explicit activation and rejects unsafe image sources", async ({ page }) => {
+  const requests: string[] = []
+  await page.route("https://images.example/**", (route) => {
+    requests.push(route.request().url())
     expect(route.request().headers().authorization).toBeUndefined()
 
-    return route.fulfill({ contentType: "image/png", body: png })
+    if (route.request().url().endsWith(".png")) return route.fulfill({ contentType: "image/png", body: png })
+    return route.abort()
   })
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({
       images: true,
-      text: '<img alt="Remote" src="https://images.example/chart.png"><img alt="Unsafe" src="javascript:alert(1)" onerror="alert(2)" data-local-image="/tmp/forged.png">',
+      text: [
+        '<img alt="Remote" src="https://images.example/chart.png">',
+        '<audio controls src="https://images.example/audio.mp3"><source src="https://images.example/audio-source.mp3"></audio>',
+        '<video controls src="https://images.example/video.mp4" poster="https://images.example/poster.png"><source src="https://images.example/video-source.mp4"><track src="https://images.example/captions.vtt"></video>',
+        '<picture><source srcset="https://images.example/picture.png 1x"><img alt="Picture" src="https://images.example/fallback.png"></picture>',
+        '<img alt="Unsafe" src="javascript:alert(1)" onerror="alert(2)" data-local-image="/tmp/forged.png">',
+      ].join(""),
     })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
+  await expect(
+    harness.locator("img[src], audio[src], video[src], video[poster], source[src], source[srcset], track[src]"),
+  ).toHaveCount(0)
+  expect(requests).toEqual([])
+  await harness.locator("audio").evaluate((media: HTMLMediaElement) => media.click())
+  await expect(harness.locator("audio")).toHaveAttribute("src", "https://images.example/audio.mp3")
+  await expect(harness.locator("audio source")).toHaveAttribute("src", "https://images.example/audio-source.mp3")
+  await harness.locator("video").evaluate((media: HTMLMediaElement) => media.click())
+  await expect(harness.locator("video")).toHaveAttribute("src", "https://images.example/video.mp4")
+  await expect(harness.locator("video")).toHaveAttribute("poster", "https://images.example/poster.png")
+  await expect(harness.locator("video source")).toHaveAttribute("src", "https://images.example/video-source.mp4")
+  await expect(harness.locator("track")).toHaveAttribute("src", "https://images.example/captions.vtt")
+  await harness.locator("picture img").evaluate((image: HTMLImageElement) => image.click())
+  await expect(harness.locator("picture source")).toHaveAttribute(
+    "srcset",
+    "https://images.example/picture.png 1x",
+  )
+  await harness.locator("img").first().evaluate((image: HTMLImageElement) => image.click())
   await expect
     .poll(() =>
       harness.getByRole("button", { name: "Remote" }).evaluate((image: HTMLImageElement) => image.naturalWidth),
     )
     .toBe(1)
+  expect(requests).toContain("https://images.example/chart.png")
   await expect(harness.getByRole("button", { name: "Remote" })).toHaveAttribute(
     "src",
     "https://images.example/chart.png",

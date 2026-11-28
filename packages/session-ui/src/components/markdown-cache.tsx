@@ -90,6 +90,9 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       "command",
       "commandfor",
       "data-floating-overlay",
+      "data-markdown-media-poster",
+      "data-markdown-media-src",
+      "data-markdown-media-srcset",
       "data-markdown-renderer",
     ],
     FORBID_CONTENTS: ["style", "script"],
@@ -113,6 +116,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
   })
   // These fragments still pass DOMPurify's structural/URI checks, but their renderer owns their inline geometry.
   rendered.setConfig({ ...config, USE_PROFILES: { html: true, mathMl: true }, RETURN_DOM_FRAGMENT: true })
+  rendered.addHook("afterSanitizeAttributes", (node: Element) => inertMarkdownMediaElement(node))
   purifier.addHook("uponSanitizeElement", (node) => {
     // `a`, `use`, `image` and `foreignObject` inside SVG would link, reference or embed; drop them with their contents.
     if (node instanceof SVGElement && node.localName !== "svg" && node.localName !== "path") node.remove()
@@ -237,6 +241,8 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     node.removeAttribute("srcset")
   })
   purifier.addHook("afterSanitizeAttributes", (node: Element) => {
+    inertMarkdownMediaElement(node)
+
     // This application-owned marker only adds containment. Renderer fragments never pass through this hook.
     if (
       node instanceof Element &&
@@ -320,17 +326,47 @@ export function sanitizeMarkdown(html: MarkdownHTML) {
   const plain = typeof html === "string"
   template.content.append(purifier.sanitize(plain ? html : html.html, { RETURN_DOM_FRAGMENT: true }))
 
-  if (plain) return template.innerHTML
+  if (!plain) {
+    for (const [key, output] of html.fragments) {
+      // Replace the complete slot, never bless it or its children. Author input cannot populate the worker's map.
+      const slot = template.content.getElementById(`user-content-${key}`)
 
-  for (const [key, output] of html.fragments) {
-    // Replace the complete slot, never bless it or its children. Author input cannot populate the worker's map.
-    const slot = template.content.getElementById(`user-content-${key}`)
-
-    if (!slot) continue
-    slot.replaceWith(rendererFragment(output))
+      if (!slot) continue
+      slot.replaceWith(rendererFragment(output))
+    }
   }
 
+  inertMarkdownMedia(template.content)
+
   return template.innerHTML
+}
+
+// Network-capable attributes stay inert in serialized Markdown. The live renderer restores only the values that
+// survived DOMPurify, and only after the reader explicitly activates that media element.
+function inertMarkdownMedia(root: DocumentFragment) {
+  root.querySelectorAll("img, video, audio, source, track").forEach(inertMarkdownMediaElement)
+}
+
+function inertMarkdownMediaElement(element: Element) {
+  const attributes = {
+    img: ["src"],
+    video: ["src", "poster"],
+    audio: ["src"],
+    source: ["src", "srcset"],
+    track: ["src"],
+  } as const
+  const names = attributes[element.localName as keyof typeof attributes]
+
+  if (!names) return
+
+  names.forEach((name) => {
+    const value = element.getAttribute(name)
+
+    if (value === null) return
+    if (name !== "srcset" && /^(?:blob|data):/i.test(value.trim())) return
+    element.removeAttribute(name)
+    element.setAttribute(`data-markdown-media-${name}`, value)
+  })
 }
 
 // A streamed block is sanitized again on every delta while its formulas and code stay the same.
