@@ -85,7 +85,13 @@ jobs:
       matrix:
         # Pull requests run Linux only; Windows runs the same tests on pushes, nightly runs and the release gate.
         settings: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
-    runs-on: ${{ matrix.settings.host }}
+    # The OpenHades fork has no Blacksmith runners.
+    runs-on: >-
+      ${{ github.repository == 'silasthegoldenwizard/opencode' &&
+          github.event_name == 'pull_request' &&
+          github.base_ref == 'openhades' &&
+          matrix.settings.name == 'linux' &&
+          'ubuntu-24.04' || matrix.settings.host }}
     defaults:
       run:
         shell: bash
@@ -117,6 +123,23 @@ jobs:
         run: |
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
+
+      - name: Set up ripgrep
+        if: >-
+          github.repository == 'silasthegoldenwizard/opencode' &&
+          github.event_name == 'pull_request' &&
+          github.base_ref == 'openhades' &&
+          matrix.settings.name == 'linux'
+        run: |
+          # Tests block runtime downloads. Use the x64 Linux asset and checksum pinned in packages/core/src/ripgrep/binary.ts.
+          version=15.1.0
+          release="ripgrep-$version-x86_64-unknown-linux-musl"
+          archive="$RUNNER_TEMP/$release.tar.gz"
+          curl -fsSL --retry 3 -o "$archive" "https://github.com/BurntSushi/ripgrep/releases/download/$version/$release.tar.gz"
+          echo "1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" "$release/rg"
+          "$RUNNER_TEMP/$release/rg" --version
+          echo "$RUNNER_TEMP/$release" >> "$GITHUB_PATH"
 
       - name: Run unit tests
         timeout-minutes: 20
