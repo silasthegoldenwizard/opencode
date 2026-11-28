@@ -85,7 +85,13 @@ jobs:
       matrix:
         # Pull requests run Linux only; Windows runs the same tests on pushes, nightly runs and the release gate.
         settings: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
-    runs-on: ${{ matrix.settings.host }}
+    # The OpenHades fork has no Blacksmith runners.
+    runs-on: >-
+      ${{ github.repository == 'silasthegoldenwizard/opencode' &&
+          github.event_name == 'pull_request' &&
+          github.base_ref == 'openhades' &&
+          matrix.settings.name == 'linux' &&
+          'ubuntu-24.04' || matrix.settings.host }}
     defaults:
       run:
         shell: bash
