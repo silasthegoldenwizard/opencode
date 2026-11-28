@@ -54,6 +54,10 @@ it.live("authenticates API requests behind the frontend transform while allowing
     expect(status.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => status.json())).toMatchObject({ version: "test-version" })
 
+    const queryCredential = new URL("/api/info", HttpServer.formatAddress(server.address))
+    queryCredential.searchParams.set("auth_token", btoa("opencode:secret"))
+    expect((yield* Effect.promise(() => fetch(queryCredential))).status).toBe(401)
+
     yield* Effect.forEach(
       ["http://192.168.1.10:3001", "https://example.com", "https://untrusted.example.com"],
       (origin) =>
@@ -224,6 +228,9 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
       (yield* request("/api/info", { headers: { authorization: `Basic ${btoa(`opencode:${session.token}`)}` } }))
         .status,
     ).toBe(200)
+    const querySession = new URL("/api/info", base)
+    querySession.searchParams.set("auth_token", btoa(`opencode:${session.token}`))
+    expect((yield* request(querySession.href)).status).toBe(401)
     expect((yield* request(`/auth/connect/${client.code}`)).status).toBe(401)
     expect((yield* request("/auth/connect/unknown")).status).toBe(401)
   }),

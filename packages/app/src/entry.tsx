@@ -11,7 +11,6 @@ import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/pl
 import { KeyboardInsets } from "@/runtime/platform/keyboard"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
-import { authFromToken } from "@/runtime/server/api"
 import pkg from "../package.json"
 import { ServerConnection } from "@/runtime/server/registry"
 
@@ -49,6 +48,8 @@ const clearAuthToken = () => {
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
 }
 
+clearAuthToken()
+
 // package.json carries the last stable version on every channel, so the server's build passes its own release.
 const web = createWebPlatform(import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version)
 
@@ -81,8 +82,6 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   // Lazy chunks can import the entry chunk back under a distinct URL, so claim the root before async startup.
   root.dataset.opencodeMounted = ""
   void loadInitialLocale().then((locale) => {
-    const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
-    clearAuthToken()
     const standalone = isStandalone()
     root.dataset.standalone = String(standalone)
 
@@ -91,11 +90,7 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
     const server: ServerConnection.Http | undefined = web.currentServerUrl
       ? {
           type: "http",
-          authToken: !!auth,
-          http: {
-            url: web.currentServerUrl,
-            ...auth,
-          },
+          http: { url: web.currentServerUrl },
         }
       : undefined
 

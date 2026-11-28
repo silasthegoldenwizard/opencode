@@ -13,16 +13,11 @@ use crate::error::{DeclaredError, Error};
 use crate::query;
 use crate::transport::{Request, Reqwest, Response, SseResponse, Transport};
 
-/// The query parameter the server reads credentials from when a request cannot carry headers.
-pub const AUTH_TOKEN_QUERY: &str = "auth_token";
-
-/// HTTP Basic credentials can travel in the `authorization` header or the `auth_token` query parameter.
+/// HTTP Basic credentials sent in the `authorization` header.
 #[derive(Clone, PartialEq, Eq)]
 pub enum Auth {
     /// `authorization: Basic base64(username:password)`.
     Basic { username: String, password: String },
-    /// `?auth_token=base64(username:password)`.
-    Query { username: String, password: String },
 }
 
 impl Auth {
@@ -31,20 +26,17 @@ impl Auth {
         Self::Basic { username: "opencode".to_owned(), password: password.into() }
     }
 
-    /// `base64(username:password)`, the value of the header after `Basic ` and of `auth_token`.
+    /// `base64(username:password)`, the value of the header after `Basic `.
     pub fn token(&self) -> String {
-        let (Self::Basic { username, password } | Self::Query { username, password }) = self;
+        let Self::Basic { username, password } = self;
         base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"))
     }
 }
 
 impl std::fmt::Debug for Auth {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (kind, username) = match self {
-            Self::Basic { username, .. } => ("Basic", username),
-            Self::Query { username, .. } => ("Query", username),
-        };
-        write!(f, "Auth::{kind} {{ username: {username:?}, password: <redacted> }}")
+        let Self::Basic { username, .. } = self;
+        write!(f, "Auth::Basic {{ username: {username:?}, password: <redacted> }}")
     }
 }
 
@@ -132,13 +124,9 @@ impl Client {
 
     /// Builds the request for `call`, as `prepare` does in TypeScript.
     pub fn prepare(&self, call: Call) -> Result<Request, Error> {
-        let mut query = call.query;
-        if let Some(auth @ Auth::Query { .. }) = &self.auth {
-            query.push((AUTH_TOKEN_QUERY.to_owned(), auth.token()));
-        }
-        let url = self.url(&call.path, &query)?;
+        let url = self.url(&call.path, &call.query)?;
         let mut headers = Vec::new();
-        if let Some(auth @ Auth::Basic { .. }) = &self.auth {
+        if let Some(auth) = &self.auth {
             headers.push(("authorization".to_owned(), format!("Basic {}", auth.token())));
         }
         for (name, value) in self.headers.iter().chain(&call.headers) {
@@ -409,30 +397,26 @@ fn is_content_type(response: &Response, expected: &str) -> bool {
 mod tests {
     use super::*;
 
-    // Expected: a path that resolves to another origin is refused before credentials are added, in both credential
-    // modes, while a path on the server, its prefix kept, still prepares.
+    // Expected: a path that resolves to another origin is refused before credentials are added, while a path on the
+    // server, its prefix kept, still prepares.
     #[test]
     fn a_request_stays_on_the_configured_origin() {
-        let base = Client::new("https://server.invalid:4096/base").unwrap();
-        let credentials = [
-            Auth::Basic { username: "opencode".into(), password: "secret".into() },
-            Auth::Query { username: "opencode".into(), password: "secret".into() },
-        ];
-        for auth in credentials {
-            let client = base.clone().auth(auth);
-            for path in [
-                "/https://outside.invalid/x",
-                "/http://server.invalid:4096/x",
-                "/\\\\outside.invalid/x",
-                "/ //outside.invalid/x",
-            ] {
-                let error = client.prepare(Call::new("GET", path.to_owned(), 200, &[])).unwrap_err();
-                assert!(matches!(error, Error::Transport(_)), "{path}: {error:?}");
-            }
-            for (path, url) in [("/api/x", "/base/api/x"), ("//outside.invalid/x", "/base/outside.invalid/x")] {
-                let request = client.prepare(Call::new("GET", path.to_owned(), 200, &[])).unwrap();
-                assert_eq!(request.url.path(), url);
-            }
+        let client = Client::new("https://server.invalid:4096/base").unwrap().auth(Auth::Basic {
+            username: "opencode".into(),
+            password: "secret".into(),
+        });
+        for path in [
+            "/https://outside.invalid/x",
+            "/http://server.invalid:4096/x",
+            "/\\\\outside.invalid/x",
+            "/ //outside.invalid/x",
+        ] {
+            let error = client.prepare(Call::new("GET", path.to_owned(), 200, &[])).unwrap_err();
+            assert!(matches!(error, Error::Transport(_)), "{path}: {error:?}");
+        }
+        for (path, url) in [("/api/x", "/base/api/x"), ("//outside.invalid/x", "/base/outside.invalid/x")] {
+            let request = client.prepare(Call::new("GET", path.to_owned(), 200, &[])).unwrap();
+            assert_eq!(request.url.path(), url);
         }
     }
 }

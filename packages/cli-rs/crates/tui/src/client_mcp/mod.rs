@@ -112,16 +112,14 @@ pub fn sync(tui: &Tui) {
     *state.connection.borrow_mut() = Some(connection);
 }
 
-/// The server URL and handshake headers: Basic credentials go in `authorization`, query credentials in `auth_token`.
+/// The server URL and handshake headers, with credentials in `authorization`.
 fn endpoint(base: &url::Url, auth: Option<&Auth>) -> (url::Url, Vec<(String, String)>) {
-    let mut url = base.clone();
     match auth {
-        Some(auth @ Auth::Basic { .. }) => (url, vec![("authorization".to_owned(), format!("Basic {}", auth.token()))]),
-        Some(auth @ Auth::Query { .. }) => {
-            url.query_pairs_mut().append_pair("auth_token", &auth.token());
-            (url, Vec::new())
-        }
-        None => (url, Vec::new()),
+        Some(auth) => (
+            base.clone(),
+            vec![("authorization".to_owned(), format!("Basic {}", auth.token()))],
+        ),
+        None => (base.clone(), Vec::new()),
     }
 }
 
