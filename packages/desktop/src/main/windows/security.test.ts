@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import type { BrowserWindow, Session, WebContents } from "electron"
-import { allowRendererPermissions, receivesPluginPort } from "./security"
+import { SidecarCredentials } from "../service/sidecar-credentials"
+import { allowRendererPermissions, receivesPluginPort, wireRendererHeaders } from "./security"
 
 type RequestHandler = NonNullable<Parameters<Session["setPermissionRequestHandler"]>[0]>
 
@@ -12,6 +13,10 @@ type Permission = Parameters<RequestHandler>[1]
 type RequestDetails = Parameters<RequestHandler>[3]
 
 type CheckDetails = Parameters<CheckHandler>[3]
+
+type HeaderHandler = NonNullable<Parameters<Session["webRequest"]["onBeforeSendHeaders"]>[1]>
+
+type HeaderDetails = Parameters<HeaderHandler>[0]
 
 const url = "oc://renderer/index.html"
 
@@ -88,6 +93,36 @@ function createWindow(id: number, session: Session) {
   }
 }
 
+function createHeaderSession() {
+  let before: HeaderHandler | undefined
+  const webRequest = {
+    onBeforeSendHeaders(_filter: unknown, handler: HeaderHandler | null) {
+      before = handler ?? undefined
+    },
+    onHeadersReceived() {},
+  }
+  // SAFETY: wireRendererHeaders touches only the session's two webRequest registration methods.
+  const session = { webRequest } as unknown as Session
+  // SAFETY: wireRendererHeaders reads only `webContents.session` from the window.
+  const win = { webContents: { session } } as unknown as BrowserWindow
+
+  wireRendererHeaders(win)
+
+  return (resourceType: HeaderDetails["resourceType"]) =>
+    new Promise<HeaderDetails["requestHeaders"]>((resolve) => {
+      if (!before) throw new Error("Missing before-send-headers handler")
+      before(
+        {
+          url: "http://127.0.0.1:4096/session",
+          resourceType,
+          frame: { parent: null, url },
+          requestHeaders: {},
+        } as HeaderDetails,
+        (response) => resolve(response.requestHeaders ?? {}),
+      )
+    })
+}
+
 test("retains permissions across all live windows on a shared session and revokes closed ones", async () => {
   const shared = createSession()
   const first = createWindow(1, shared.session)
@@ -137,4 +172,22 @@ test("hands the plugin port only to the app's own document, never to a page the 
   expect(receivesPluginPort(window("https://renderer.evil.test/oc://renderer/index.html"))).toBe(false)
   expect(receivesPluginPort(window(""))).toBe(false)
   expect(receivesPluginPort(window(url, true))).toBe(false)
+})
+
+test("credentials application API transports without credentialing document media", async () => {
+  SidecarCredentials.set({ url: "http://127.0.0.1:4096", password: "fixture" })
+  const request = createHeaderSession()
+  const expected = `Basic ${Buffer.from("opencode:fixture").toString("base64")}`
+
+  for (const [resourceType, authorization] of [
+    ["xhr", expected],
+    ["webSocket", expected],
+    ["image", undefined],
+    ["media", undefined],
+  ] as const) {
+    const headers = await request(resourceType)
+    expect(headers.Authorization).toBe(authorization)
+  }
+
+  SidecarCredentials.set({ url: "http://127.0.0.1:4096", password: null })
 })

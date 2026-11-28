@@ -689,6 +689,86 @@ function setupExternalLinkFavicons(root: HTMLDivElement) {
   return () => root.removeEventListener("load", loaded, true)
 }
 
+const inertMediaSelector =
+  "[data-markdown-media-src], [data-markdown-media-srcset], [data-markdown-media-poster]"
+
+function setupRemoteMedia(root: HTMLDivElement, loadLabel: string, previewLabel: string) {
+  const pending = (media: HTMLImageElement | HTMLMediaElement) => {
+    const scope = media instanceof HTMLImageElement && media.parentElement instanceof HTMLPictureElement
+      ? media.parentElement
+      : media
+
+    return scope.matches(inertMediaSelector) || !!scope.querySelector(inertMediaSelector)
+  }
+
+  const control = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return
+    const media = target.closest("img, video, audio")
+
+    if (!(media instanceof HTMLImageElement || media instanceof HTMLMediaElement)) return
+    if (!root.contains(media) || !pending(media)) return
+
+    return media
+  }
+
+  const activate = (event: MouseEvent | KeyboardEvent) => {
+    const media = control(event.target)
+
+    if (!media) return
+    if (event instanceof KeyboardEvent && event.key !== "Enter" && event.key !== " ") return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    const scope = media instanceof HTMLImageElement && media.parentElement instanceof HTMLPictureElement
+      ? media.parentElement
+      : media
+    const elements = [
+      ...scope.querySelectorAll<HTMLElement>(inertMediaSelector),
+      ...(scope.matches(inertMediaSelector) ? [scope] : []),
+    ]
+
+    elements.forEach((element) => {
+      for (const name of ["src", "srcset", "poster"] as const) {
+        const attribute = `data-markdown-media-${name}`
+        const value = element.getAttribute(attribute)
+
+        if (value === null) continue
+        element.setAttribute(name, value)
+        element.removeAttribute(attribute)
+      }
+    })
+    media.classList.remove("markdown-remote-media")
+
+    if (media instanceof HTMLImageElement) {
+      media.setAttribute("aria-label", media.alt || previewLabel)
+      return
+    }
+
+    media.removeAttribute("role")
+    media.removeAttribute("tabindex")
+    media.removeAttribute("aria-label")
+    media.load()
+  }
+
+  root.addEventListener("click", activate, true)
+  root.addEventListener("keydown", activate, true)
+
+  return {
+    update() {
+      root.querySelectorAll<HTMLImageElement | HTMLMediaElement>("img, video, audio").forEach((media) => {
+        if (!pending(media)) return
+        media.classList.add("markdown-remote-media")
+        media.setAttribute("role", "button")
+        media.tabIndex = 0
+        media.setAttribute("aria-label", loadLabel)
+      })
+    },
+    dispose() {
+      root.removeEventListener("click", activate, true)
+      root.removeEventListener("keydown", activate, true)
+    },
+  }
+}
+
 // A path becomes a link once `localFileExists` says the file exists. A streaming block skips the check: its last code
 // span may still be half written, and the block renders again once it completes.
 function markInlineCode(
@@ -1159,6 +1239,7 @@ export function Markdown(
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
   let fragmentLinkCleanup: (() => void) | undefined
+  let remoteMedia: ReturnType<typeof setupRemoteMedia> | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -1270,6 +1351,12 @@ export function Markdown(
 
     images?.update(container)
     previewImages(container)
+    remoteMedia ??= setupRemoteMedia(
+      container,
+      i18n.t("ui.remoteMedia.load"),
+      i18n.t("ui.imagePreview.alt"),
+    )
+    remoteMedia.update()
     container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
       if (image.complete && image.naturalWidth > 0) showFavicon(image)
     })
@@ -1331,6 +1418,8 @@ export function Markdown(
     if (fragmentLinkCleanup) fragmentLinkCleanup()
 
     if (faviconCleanup) faviconCleanup()
+
+    remoteMedia?.dispose()
     const container = root()
 
     if (container) disposeRenderedMarkdown(container)
